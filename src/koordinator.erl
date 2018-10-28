@@ -69,10 +69,10 @@ initial(Config) ->
       {_,Cl} = keyfind(clients,Config),
       {_,GgtNr} = keyfind(ggtprozessnummer, Config),
       util:logging(Logfile, "getsteeringval: " ++ util:to_String(From) ++ " (" ++ util:to_String(Cl + GgtNr) ++ ")\n"),
-      {arbeitszeit, ArbeitsZeit} = keyfind(arbeitszeit, Config),
-      {termzeit, TermZeit} = keyfind(termzeit, Config),
-      {quote, Quote} = keyfind(quote, Config),
-      {ggtprozessnummer, GGTProzessnummer} = keyfind(ggtprozessnummer, Config),
+      {_, ArbeitsZeit} = keyfind(arbeitszeit, Config),
+      {_, TermZeit} = keyfind(termzeit, Config),
+      {_, Quote} = keyfind(quote, Config),
+      {_, GGTProzessnummer} = keyfind(ggtprozessnummer, Config),
       Config_Tmp_1 = keystore(clients, Config, {clients, Cl + GgtNr}),
       %Sendet From (Starter) seine Einstellungs-Werte.
       %Dies sind die Arbeitszeit, die Termzeit, die Quote, und die GGTProzessnummer.
@@ -118,12 +118,12 @@ initial(Config) ->
 
 %bereit
 bereit(Config) ->
-  {logfile, Logfile} = keyfind(logfile, Config),
-  {ggts, GGTs} = keyfind(ggts, Config),
-  {korrigieren, Korrigieren} = keyfind(korrigieren, Config),
-  {nameservice, NameService} = keyfind(nameservice, Config),
-  {koordinatorname, Koordinatorname} = keyfind(koordinatorname, Config),
-  {minmi, MinMi} = keyfind(minmi, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  {_, GGTs} = keyfind(ggts, Config),
+  {_, Korrigieren} = keyfind(korrigieren, Config),
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Koordinatorname} = keyfind(koordinatorname, Config),
+  {_, MinMi} = keyfind(minmi, Config),
   receive
     reset ->
       %Beendet alle ggt-Prozesse (kill), leert die ggt-Prozessliste und setzt den Zustand auf initial.
@@ -189,7 +189,10 @@ bereit(Config) ->
       NameService ! {self(),{unbind, Koordinatorname}},
       unregister(Koordinatorname),
       %Beendet sich selbst
-      erlang:exit(self(),normal)
+      erlang:exit(self(),normal);
+    Any ->
+      util:logging(Logfile, "Unerwartete Nachricht erhalten.\n" ++ util:to_String(Any) ++ " \n"),
+      initial(Config)
   end.
 
 ringbildung([GGT | Tail], Config, GGTf) ->
@@ -220,9 +223,9 @@ ringbildung([GGT | Tail], Config, GGTf) ->
 prompt_ggts([], _) -> ok;
 %Iteriert durch die ggt-Liste und erfragt bei jedem ggt seine aktuelle Mi (per “tellmi”) und loggt diese.
 prompt_ggts([ GGT | Tail ], Config) ->
-  {logfile, Logfile} = keyfind(logfile, Config),
+  {_, Logfile} = keyfind(logfile, Config),
   util:logging(Logfile, "prompt\n"),
-  {nameservice, NameService} = keyfind(nameservice, Config),
+  {_, NameService} = keyfind(nameservice, Config),
   NameService ! {self(),{lookup, GGT}},
   receive
     not_found -> util:logging(Logfile, "GGT ist nicht auf derm Namensservice vorhanden\n");
@@ -237,12 +240,11 @@ prompt_ggts([ GGT | Tail ], Config) ->
 
 %beenden
 beenden([], Config) ->
-  {logfile, Logfile} = keyfind(logfile, Config),
+  {_, Logfile} = keyfind(logfile, Config),
   util:logging(Logfile, "Allen ggT-Prozessen ein 'kill' gesendet.");
 beenden([ GGT | Tail ], Config) ->
-  {logfile, Logfile} = keyfind(logfile, Config),
-  util:logging(Logfile, util:to_String(GGT) ++ "beendet sich\n"),
-  {nameservice, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  {_, NameService} = keyfind(nameservice, Config),
   NameService ! {self(),{lookup, GGT}},
   receive
     not_found ->

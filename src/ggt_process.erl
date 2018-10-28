@@ -23,10 +23,10 @@ start(ArbeitsZeit,TermZeit,Quota,Praktikumsgruppe,Teamnummer,GGTProzessnummer,St
   spawn(?MODULE, init_ggt, [Config]).
 
 init_ggt(Config) ->
-  {names, NameS} = keyfind(names, Config),
-  {ggtname, GGTName} = keyfind(ggtname, Config),
-  {logfile, Logfile} = keyfind(logfile, Config),
-  {koordinator, Koordinator} = keyfind(koordinator, Config),
+  {_, NameS} = keyfind(names, Config),
+  {_, GGTName} = keyfind(ggtname, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  {_, Koordinator} = keyfind(koordinator, Config),
   util:logging(Logfile, util:to_String(GGTName) ++ "\n"),
 
   %Er registriert sich ebenfalls lokal auf der Erlang-Node mit seinem Namen (register)
@@ -43,9 +43,9 @@ init_ggt(Config) ->
   start_ggt(Config).
 
 start_ggt(Config) ->
-  {names, NameS} = keyfind(names, Config),
-  {ggtname, GGTName} = keyfind(ggtname, Config),
-  {logfile, Logfile} = keyfind(logfile, Config),
+  {_, NameS} = keyfind(names, Config),
+  {_, GGTName} = keyfind(ggtname, Config),
+  {_, Logfile} = keyfind(logfile, Config),
   util:logging(Logfile, util:to_String(GGTName) ++ "\n"),
   receive
     {setneighbors,LeftN,RightN} ->
@@ -65,20 +65,20 @@ start_ggt(Config) ->
 .
 
 arbeitsphase_ggt(Config) ->
-  {mi, Mi} = keyfind(mi, Config),
-  {koordinator, Koordinator} = keyfind(koordinator, Config),
-  {ggtname, GGTName} = keyfind(ggtname, Config),
-  {arbeitszeit, ArbeitsZeit} = keyfind(arbeitszeit, Config),
-  {leftn, LeftN} = keyfind(leftn, Config),
-  {rightn, RightN} = keyfind(rightn, Config),
-  {termzeit, TermZeit} = keyfind(termzeit, Config),
-  {tref, TRef} = keyfind(tref, Config),
-  {names, NameS} = keyfind(names, Config),
-  {logfile, Logfile} = keyfind(logfile, Config),
-  {votes, Votes} = keyfind(votes, Config),
-  {quota, Quota} = keyfind(quota, Config),
-  {letztenachricht, LetzteNachricht} = keyfind(letztenachricht, Config),
-  {names, NameService} = keyfind(names, Config),
+  {_, Mi} = keyfind(mi, Config),
+  {_, Koordinator} = keyfind(koordinator, Config),
+  {_, GGTName} = keyfind(ggtname, Config),
+  {_, ArbeitsZeit} = keyfind(arbeitszeit, Config),
+  {_, LeftN} = keyfind(leftn, Config),
+  {_, RightN} = keyfind(rightn, Config),
+  {_, TermZeit} = keyfind(termzeit, Config),
+  {_, TRef} = keyfind(tref, Config),
+  {_, NameS} = keyfind(names, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  {_, Votes} = keyfind(votes, Config),
+  {_, Quota} = keyfind(quota, Config),
+  {_, LetzteNachricht} = keyfind(letztenachricht, Config),
+  {_, NameService} = keyfind(names, Config),
   receive
     %Vor einer ggT-Berechnung erwartet der ggT-Prozess vom Koordinator seine Zahl Mi (setpm).
     {setpm, MiNeu} ->
@@ -144,13 +144,6 @@ arbeitsphase_ggt(Config) ->
        %   arbeitsphase_ggt(Config);
         Comp =< 0 ->
           util:logging(Logfile, atom_to_list(Initiator) ++ " hat Terminierungswahl gestartet und " ++ atom_to_list(GGTName) ++ " stimmt YES " ++ util:to_String(vsutil:now2string(erlang:timestamp())) ++ "\n"),
-          %NameS ! {self(),{lookup, Initiator}},
-        	%	receive
-        	%		not_found ->
-          %     error;
-        	%		{pin, Initiator} ->
-          %      Initiator ! {voteYes, GGTName}
-        	%	end,
           From ! {voteYes, GGTName},
           arbeitsphase_ggt(Config);
 	      true ->

@@ -56,15 +56,15 @@ start(StarterID) ->
 
 
 ggt_starter(Iterator, Config) ->
-  {arbeitszeit, ArbeitsZeit} = keyfind(arbeitszeit, Config),
-  {termzeit, TermZeit} = keyfind(termzeit, Config),
-  {ggtprozessnummer, GGTProzessnummer} = keyfind(ggtprozessnummer, Config),
-  {koordinatornamenode, KoordinatorNameNode} = keyfind(koordinatornamenode, Config),
-  {quote, Quote} = keyfind(quote, Config),
-  {nameservice, NameService} = keyfind(nameservice, Config),
-  {praktikumsgruppe, Praktikumsgruppe} = keyfind(praktikumsgruppe, Config),
-  {teamnummer, Teamnummer} = keyfind(teamnummer, Config),
-  {starterid, StarterID} = keyfind(starterid, Config),
+  {_, ArbeitsZeit} = keyfind(arbeitszeit, Config),
+  {_, TermZeit} = keyfind(termzeit, Config),
+  {_, GGTProzessnummer} = keyfind(ggtprozessnummer, Config),
+  {_, KoordinatorNameNode} = keyfind(koordinatornamenode, Config),
+  {_, Quote} = keyfind(quote, Config),
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Praktikumsgruppe} = keyfind(praktikumsgruppe, Config),
+  {_, Teamnummer} = keyfind(teamnummer, Config),
+  {_, StarterID} = keyfind(starterid, Config),
   spawn(ggt_process, start, [ArbeitsZeit*1000,TermZeit,Quote,Praktikumsgruppe,Teamnummer,Iterator,StarterID,NameService,KoordinatorNameNode]),
   if
     Iterator == GGTProzessnummer ->
