@@ -140,8 +140,8 @@ arbeitsphase_ggt(Config) ->
       CTime = vsutil:getUTC(),
       Comp = (LetzteNachricht + (TermZeit / 2)) - CTime,
       if
-        Initiator == GGTName ->
-          arbeitsphase_ggt(Config);
+       % Initiator == GGTName ->
+       %   arbeitsphase_ggt(Config);
         Comp =< 0 ->
           util:logging(Logfile, atom_to_list(Initiator) ++ " hat Terminierungswahl gestartet und " ++ atom_to_list(GGTName) ++ " stimmt YES " ++ util:to_String(vsutil:now2string(erlang:timestamp())) ++ "\n"),
           %NameS ! {self(),{lookup, Initiator}},

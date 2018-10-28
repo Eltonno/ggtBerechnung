@@ -1,128 +1,147 @@
 -module(koordinator).
--export([start/0, initial/1]).
+-export([start/0, start_ko/1, msg/1]).
 
-start() ->
+start () ->
+  start("koordinator.cfg").
+start(File) ->
+  spawn(?MODULE, start_ko, [File]).
 
+start_ko(Datei) ->
   {ok, Hostname} = inet:gethostname(),
+  Logfile = "Koordinator@" ++ Hostname ++ ".log",
+  util:logging(Logfile, "Koordinator-" ++ util:to_String(node()) ++ "-LAW Startzeit: " ++ vsutil:now2string(erlang:timestamp()) ++ " mit PID " ++ util:to_String(self()) ++ "\n"),
+
+  util:logging(Logfile, "koordinator.cfg geoffnet...\n"),
   %Die Einstellungen für den Koordinator werden aus der koordinator.cfg-Datei ausgelesen.
   %Diese beinhaltet:
-  {ok, Config} = file:consult("koordinator.cfg"),
+  {ok, File} = file:consult(Datei),
   %Verzögerungszeit für die Berechnung (arbeitszeit)
-  {ok, ArbeitsZeit} = vsutil:get_config_value(arbeitszeit, Config),
+  {ok, ArbeitsZeit} = vsutil:get_config_value(arbeitszeit, File),
   %Lebenszeit (termzeit)
-  {ok, TermZeit} = vsutil:get_config_value(termzeit, Config),
+  {ok, TermZeit} = vsutil:get_config_value(termzeit, File),
   %Anzahl der zu startenden GGT-Prozesse (ggtprozessnummer)
-  {ok, GGTProzessnummer} = vsutil:get_config_value(ggtprozessnummer, Config),
+  {ok, GGTProzessnummer} = vsutil:get_config_value(ggtprozessnummer, File),
   %Namensdienst Node (nameservicenode)
-  {ok, NameServiceNode} = vsutil:get_config_value(nameservicenode, Config),
+  {ok, NameServiceNode} = vsutil:get_config_value(nameservicenode, File),
   %Name des Koordinators (koordinatorname)
-  {ok, Koordinatorname} = vsutil:get_config_value(koordinatorname, Config),
+  {ok, Koordinatorname} = vsutil:get_config_value(koordinatorname, File),
   %Für die Abstimmung benötigte Quote in % (quote)
-  {ok, Quote} = vsutil:get_config_value(quote, Config),
+  {ok, Quote} = vsutil:get_config_value(quote, File),
   %Ob der Koordinator bei Terminierungsmeldungen korrigierend eingreifen soll (korrigieren)
-  {ok, Korrigieren} = vsutil:get_config_value(korrigieren, Config),
+  {ok, Korrigieren} = vsutil:get_config_value(korrigieren, File),
+  util:logging(Logfile, "koordinator.cfg gelesen...\n"),
+  Config = [{arbeitszeit, ArbeitsZeit},
+    {termzeit, TermZeit},
+    {ggtprozessnummer, GGTProzessnummer},
+    {nameservicenode, NameServiceNode},
+    {koordinatorname, Koordinatorname},
+    {quote, Quote},
+    {korrigieren, Korrigieren},
+    %Der Koordinator hat eine Liste der bei ihm registrierten ggt-Prozesse,
+    {ggts, []},
+    {clients, 0},
+    %und eine Variable, in der die kleinste von den ggt-Prozessen empfangene Zahl gespeichert wird.
+    {minmi, undefined},
+    {logfile, Logfile}],
+  {_, Koordinatorname} = keyfind(koordinatorname, Config),
+  {_, NameServiceNode} = keyfind(nameservicenode, Config),
+  util:logging(Logfile, "Nameservice nameservice auf " ++ util:to_String(NameServiceNode) ++ " gebunden...\n"),
   register(Koordinatorname, self()),
+  util:logging(Logfile, "lokal mit euklid registriert...\n"),
   pong = net_adm:ping(NameServiceNode),
   timer:sleep(1000),
   %%util:logging(Logfile, util:to_String(Pong)),
   NameService = global:whereis_name(nameservice),
   NameService ! {self() ,{rebind, Koordinatorname, node()}},
   receive
-    ok ->  	State = [{arbeitszeit, ArbeitsZeit},
-      {termzeit, TermZeit},
-      {ggtprozessnummer, GGTProzessnummer},
-      {nameservicenode, NameServiceNode},
-      {koordinatorname, Koordinatorname},
-      {quote, Quote},
-      {korrigieren, Korrigieren},
-      %Der Koordinator hat eine Liste der bei ihm registrierten ggt-Prozesse,
-      {ggts, []},
-      {nameservice, NameService},
-      %und eine Variable, in der die kleinste von den ggt-Prozessen empfangene Zahl gespeichert wird.
-      {minmi, undefined},
-      {logfile, "Koordinator@" ++ Hostname ++ ".log"}],
-      %Anfangs ist der Koordinator im Zustand “initial”.
-      %%spawn(?MODULE, initial, [State])
-      initial(State)
+    ok ->
+      util:logging(Logfile, "beim Namensdienst mit Node " ++ util:to_String(node()) ++ " registriert.\n"),
+      initial(keystore(nameservice, Config, {nameservice, NameService}))
   end.
 
 %initial
-initial(State) ->
-
-  {logfile, Logfile} = keyfind(logfile, State),
+initial(Config) ->
+  {_, Logfile} = keyfind(logfile, Config),
   receive
     %Hier sendet er dem Starter, wenn von dem Starter angefragt,
   % die ggtprozessnummer, arbeitszeit, termzeit, und ggt- prozessnummer * 0.<quote>
     {From, getsteeringval} ->
-      {arbeitszeit, ArbeitsZeit} = keyfind(arbeitszeit, State),
-      {termzeit, TermZeit} = keyfind(termzeit, State),
-      {quote, Quote} = keyfind(quote, State),
-      {ggtprozessnummer, GGTProzessnummer} = keyfind(ggtprozessnummer, State),
-      util:logging(Logfile, "util:to_String(NameService)\n"),
+      {_,Cl} = keyfind(clients,Config),
+      {_,GgtNr} = keyfind(ggtprozessnummer, Config),
+      util:logging(Logfile, "getsteeringval: " ++ util:to_String(From) ++ " (" ++ util:to_String(Cl + GgtNr) ++ ")\n"),
+      {arbeitszeit, ArbeitsZeit} = keyfind(arbeitszeit, Config),
+      {termzeit, TermZeit} = keyfind(termzeit, Config),
+      {quote, Quote} = keyfind(quote, Config),
+      {ggtprozessnummer, GGTProzessnummer} = keyfind(ggtprozessnummer, Config),
+      Config_Tmp_1 = keystore(clients, Config, {clients, Cl + GgtNr}),
       %Sendet From (Starter) seine Einstellungs-Werte.
       %Dies sind die Arbeitszeit, die Termzeit, die Quote, und die GGTProzessnummer.
       From ! {steeringval,ArbeitsZeit,TermZeit,trunc(GGTProzessnummer*(Quote/100)),GGTProzessnummer},
       util:logging(Logfile, util:to_String(From) ++ " die steeringval-Werte gesendet\n"),
-      initial(State);
+      initial(Config_Tmp_1);
   %Registriert den ggt-Prozess.
     {hello, Clientname} ->
-      {ggts, GGTs} = keyfind(ggts, State),
-      util:logging(Logfile, "GGT sendet Hallo\n"),
+      {_, GGTs} = keyfind(ggts, Config),
+      util:logging(Logfile, util:to_String(Clientname) ++ " sendet Hallo\n"),
       %Dazu fügt der Koordinator den ggt- Prozess in seine ggt-Prozess-Liste ein.
-      NewState = keystore(ggts, State, {ggts, GGTs ++ [Clientname]}),
-      util:logging(Logfile, util:to_String(Clientname) ++ "wurde in die ggt-Prozess-Liste hinzugefügt.\n"),
-      initial(NewState);
+      NewConfig = keystore(ggts, Config, {ggts, GGTs ++ [Clientname]}),
+      initial(NewConfig);
     step ->
-      %• Empfängt der Koordinator den Befehl “step” vom Benutzer,
+      % Empfängt der Koordinator den Befehl “step” vom Benutzer,
       % so beendet er den “initial”-Zustand in dem er die ggT-Prozesse per Zufall in einem Ring anordnet.
-      {ggts, GGTs} = keyfind(ggts, State),
-      util:logging(Logfile, "called step\n"),
+      {_, GGTs} = keyfind(ggts, Config),
+      {_, Cl} = keyfind(clients, Config),
+      Llen = listLength(GGTs),
+      util:logging(Logfile, "Anmeldefrist fuer ggT-Prozesse abgelaufen. Vemisst werden aktuell " ++ util:to_String(Cl -Llen) ++ " ggT-Prozesse\n"),
       %Die Liste der registrierten ggt-Prozesse mischen
       MixedGGTs = util:shuffle(GGTs),
-      ringbildung(MixedGGTs, State, []),
-      util:logging(Logfile, "Ring wurde erstellt. Wechselt nun in bereit-State\n"),
+      ringbildung(MixedGGTs, Config, []),
+      util:logging(Logfile, "Ring wird/wurde erstellt, Koordinator geht in den Zustand 'Bereit fuer Berechnung'.\n"),
       %Daraufhin ist er im Zustand “bereit”.
-      bereit(keystore(ggts, State, {ggts, MixedGGTs}));
+      bereit(keystore(ggts, Config, {ggts, MixedGGTs}));
     %Der Koordinator kann durch den manuellen Befehl “kill” terminiert werden
     kill ->
-	  {ggts, GGTs} = keyfind(ggts, State),
-	  {koordinatorname, Koordinatorname} = keyfind(koordinatorname, State),
-	  {nameservice, NameService} = keyfind(nameservice, State),
+	  {_, GGTs} = keyfind(ggts, Config),
+	  {_, Koordinatorname} = keyfind(koordinatorname, Config),
+	  {_, NameService} = keyfind(nameservice, Config),
       %Hier wechselt er dann in den Zustand “beenden”, wo er zuerst alle ggt-Prozesse beendet und dann sich selbst.
-      beenden(GGTs, State),
+      beenden(GGTs, Config),
       util:logging(Logfile, "Alle GGTs wurden beendet und nun beendet sich auch der Koordinator. Tschüss.\n"),
+      unregister(Koordinatorname),
       NameService ! {self(),{unbind, Koordinatorname}},
       %Beendet sich selbst
-      erlang:exit(self(),normal)
+      erlang:exit(self(),normal);
+    Any ->
+      util:logging(Logfile, "Unerwartete Nachricht erhalten.\n" ++ util:to_String(Any) ++ " \n"),
+      initial(Config)
   end.
 
 %bereit
-bereit(State) ->
-  {logfile, Logfile} = keyfind(logfile, State),
-  {ggts, GGTs} = keyfind(ggts, State),
-  {korrigieren, Korrigieren} = keyfind(korrigieren, State),
-  {nameservice, NameService} = keyfind(nameservice, State),
-  {koordinatorname, Koordinatorname} = keyfind(koordinatorname, State),
-  {minmi, MinMi} = keyfind(minmi, State),
-  util:logging(Logfile, "bereit\n"),
+bereit(Config) ->
+  {logfile, Logfile} = keyfind(logfile, Config),
+  {ggts, GGTs} = keyfind(ggts, Config),
+  {korrigieren, Korrigieren} = keyfind(korrigieren, Config),
+  {nameservice, NameService} = keyfind(nameservice, Config),
+  {koordinatorname, Koordinatorname} = keyfind(koordinatorname, Config),
+  {minmi, MinMi} = keyfind(minmi, Config),
   receive
     reset ->
       %Beendet alle ggt-Prozesse (kill), leert die ggt-Prozessliste und setzt den Zustand auf initial.
-      beenden(GGTs, State),
+      beenden(GGTs, Config),
       util:logging(Logfile, "Alle GGTs beendet und zurück auf initial-State\n"),
-      initial(keystore(ggts, State, {ggts, []}));
+      initial(keystore(ggts, Config, {ggts, []}));
     prompt ->
-      prompt_ggts(GGTs, State),
-      bereit(State);
+      prompt_ggts(GGTs, Config),
+      bereit(Config);
     %Empfängt die neue Mi des ggt und einen Timestamp.
     {briefmi,{Clientname,CMi,CZeit}} ->
       %Loggt dies.
-      util:logging(Logfile, atom_to_list(Clientname) ++ " liefert aktuelles Mi: " ++ integer_to_list(CMi) ++ " um " ++ util:to_String(CZeit) ++ "\n"),
+      util:logging(Logfile, atom_to_list(Clientname) ++ " meldet neues Mi " ++ integer_to_list(CMi) ++ " um " ++ util:to_String(CZeit) ++ " (" ++ vsutil:now2string(erlang:timestamp()) ++ ")\n"),
       if
         %Falls diese Mi die bisher kleinste empfangene Mi ist, wird dies dementsprechend gespeichert.
-        CMi < MinMi -> NewState = keystore(mi, State, {mi, CMi}), bereit(NewState)
+        CMi < MinMi -> NewConfig = keystore(mi, Config, {mi, CMi}), bereit(NewConfig)
       end,
-      bereit(State);
+      bereit(Config);
     %Empfängt vom ggt das Ergebnis der beendeten Berechnung, sowie einen Timestamp.
     {From, briefterm, {Clientname,CMi,CZeit}} ->
       if
@@ -132,97 +151,78 @@ bereit(State) ->
             %Falls dies so ist und ‘korrigiere” 1 ist, teilt er dem ggt diese kleinste Zahl per “sendy” mit.
             Korrigieren == 1 ->
               From ! {sendy, MinMi},
-              bereit(State);
+              bereit(Config);
             true ->
               %Falls dies so ist und “korrigiere” 0 ist, schreibt er dies nur als Fehlermeldung in die Log-Datei.
               util:logging(Logfile, atom_to_list(Clientname) ++ " liefert fehlerhaftes Mi: " ++ integer_to_list(CMi) ++ " um " ++ util:to_String(CZeit) ++ " es ist bereits ein kleineres Mi bekannt: " ++ integer_to_list(MinMi) ++ "\n")
           end;
       	true ->
           %Ansonsten wird diese Mi als kleinste empfangene Mi gespeichert.
-          NewState = keystore(mi, State, {mi, CMi}), bereit(NewState)
+          NewConfig = keystore(mi, Config, {mi, CMi}), bereit(NewConfig)
       end;
     nudge ->
-      lists:foreach(fun(G) ->
-       					%Iteriert durch die ggt-Liste und erfragt bei jedem ggt seinen aktuelle Lebenszustand (per “pingGGT”) und loggt diesen.
-       					NameService ! {self(),{lookup, G}},
-       					receive
-   					  		not_found -> 
-       				  			util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
-       				 		%Sendet diesen ggt-Prozessen eine Zahl
-       				 		{pin, {_,GGTNode}} -> 
-       				 			Pong = net_adm:ping(GGTNode), 
-       				 			util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(G) ++ " ist " ++ atom_to_list(Pong) ++ "\n")
-       					end
-      				end, GGTs),
-      bereit(State);
+      nudge(GGTs, Config),
+      bereit(Config);
     %Wechselt den Wert von “korrigiere” entweder von 0 auf 1 oder von 1 auf 0.
     toggle ->
       % Dies wird durch die Formel (“korrigiere” + 1) mod 2 getan
-      bereit(keystore(korrigieren, State, {korrigieren, ((Korrigieren+1) rem 2)}));
+      bereit(keystore(korrigieren, Config, {korrigieren, ((Korrigieren+1) rem 2)}));
     {calc, WggT} ->
+      util:logging(Logfile, "Beginne eine neue ggT-Berechnung mit Ziel " ++ util:to_String(WggT) ++ ".\n"),
       %Empfängt der Koordinator den Befehl “calc”, so informiert er die ggt-Prozesse über deren Mi-Wert
       %und startet bei 20% der Prozesse die Berechnung.
       Mis = vsutil:bestimme_mis(WggT, (length(GGTs))),
-      lists:foreach(fun(G)->
-      	CMi = lists:nth(index_of(G, GGTs),Mis),
-        NameService ! {self(),{lookup, G}},
-        receive
-          not_found -> util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
-          %Sendet diesen ggt-Prozessen eine Zahl
-          {pin, GGTNameNode} -> GGTNameNode ! {setpm, CMi}
-        end
-                    end, GGTs),
+      calc(GGTs,Mis,Config),
+      util:logging(Logfile, "Allen ggT-Prozessen ein initiales Mi gesendet.\n"),
       NoClients = max(2,trunc(length(GGTs)/5)),
       %Wählt 20% der ggt-Prozesse aus der ggt-Liste aus
-      TwntyPrc = lists:nthtail((length(GGTs)-NoClients), util:shuffle(GGTs)),
+      TwntyPrc = nthtail((length(GGTs)-NoClients), util:shuffle(GGTs)),
       Ys = vsutil:bestimme_mis(WggT, (length(TwntyPrc))),
-      lists:foreach(fun(G)->
-        NameService ! {self(),{lookup, G}},
-        Y = lists:nth(index_of(G, TwntyPrc),Ys),
-        receive
-          not_found -> util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
-          %und startet mit sendy rekursiv die Berechnung.
-          {pin, GGTNameNode} -> GGTNameNode ! {sendy, Y}
-        end
-                    end, TwntyPrc),
-      bereit(State);
+      twentyPerc(TwntyPrc, Ys, Config),
+      util:logging(Logfile, "Allen ausgewaehlten ggT-Prozessen ein y gesendet.\n"),
+      bereit(Config);
     %Der Koordinator kann durch den manuellen Befehl “kill” terminiert werden
     kill ->
       %Hier wechselt er dann in den Zustand “beenden”, wo er zuerst alle ggt-Prozesse beendet und dann sich selbst.
-      beenden(GGTs, State),
+      beenden(GGTs, Config),
       util:logging(Logfile, "Alle GGTs wurden beendet und nun beendet sich auch der Koordinator. Tschüss.\n"),
       NameService ! {self(),{unbind, Koordinatorname}},
+      unregister(Koordinatorname),
       %Beendet sich selbst
       erlang:exit(self(),normal)
   end.
 
-ringbildung([GGT | Tail], State, GGTf) ->
-  {logfile, Logfile} = keyfind(logfile, State),
-  util:logging(Logfile, "Ringbildung\n"),
-  {nameservice, NameService} = keyfind(nameservice, State),
+ringbildung([GGT | Tail], Config, GGTf) ->
+  {_, Logfile} = keyfind(logfile, Config),
+  {_, NameService} = keyfind(nameservice, Config),
   NameService ! {self(),{lookup, GGT}},
   receive
-    not_found -> util:logging(Logfile, "GGT ist nicht auf derm Namensservice vorhanden\n"), GGTNameNode = {};
-    {pin, GGTNameNode} -> GGTNameNode
+    not_found ->
+      util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+    {pin, {Name,Node}} ->
+      util:logging(Logfile, "ggT-Prozess " ++ util:to_String(GGT) ++ " (" ++ util:to_String(Name) ++ ") auf " ++ util:to_String(Node) ++ " gebunden.\n"),
+      {Name,Node} ! {setneighbors, last(Tail), nth(1, Tail)},
+      util:logging(Logfile, "ggT-Prozess " ++ util:to_String(Name) ++ " (" ++ util:to_String(Node) ++ ") ueber linken (" ++ atom_to_list(last(Tail)) ++ ") und rechten (" ++ atom_to_list(nth(1, Tail)) ++ ") Nachbarn informiert.\n")
       %Immer den ersten und letzten ggt_prozess durch setneighbors als Nachbarn setzen,
   end,
-    util:logging(Logfile, atom_to_list(lists:last(Tail)) ++ " left, " ++ atom_to_list(lists:nth(1, Tail)) ++"right\n"),
-  GGTNameNode ! {setneighbors, lists:last(Tail), lists:nth(1, Tail)},
+  GGTflength = listLength(GGTf),
+  Taillength = listLength(Tail),
   if
     %Den ersten GGT der Liste ans Ende der Liste packen, bis dies mit allen einmal gemacht wurde.
     %Dies wird festgestellt, da alle GGTs die schon behandelt wurden in eine zweite Liste kommen, und wenn die gleichlang ist wie GGTs, wurden alle behandelt.
-    erlang:length(GGTf) /= erlang:length(Tail) ->
-    	ringbildung(Tail ++ [GGT], State, GGTf ++ [GGT]);
+    GGTflength /= Taillength ->
+    	ringbildung(Tail ++ [GGT], Config, GGTf ++ [GGT]);
     true ->
-    	util:logging(Logfile, "Ringbildung abgeschlossen\n")
+      util:logging(Logfile, "Alle ggT-Prozesse gebunden.\n"),
+      util:logging(Logfile, "Alle ggT-Prozesse ueber Nachbarn informiert.\n")
   end.
 
 prompt_ggts([], _) -> ok;
 %Iteriert durch die ggt-Liste und erfragt bei jedem ggt seine aktuelle Mi (per “tellmi”) und loggt diese.
-prompt_ggts([ GGT | Tail ], State) ->
-  {logfile, Logfile} = keyfind(logfile, State),
+prompt_ggts([ GGT | Tail ], Config) ->
+  {logfile, Logfile} = keyfind(logfile, Config),
   util:logging(Logfile, "prompt\n"),
-  {nameservice, NameService} = keyfind(nameservice, State),
+  {nameservice, NameService} = keyfind(nameservice, Config),
   NameService ! {self(),{lookup, GGT}},
   receive
     not_found -> util:logging(Logfile, "GGT ist nicht auf derm Namensservice vorhanden\n");
@@ -231,19 +231,25 @@ prompt_ggts([ GGT | Tail ], State) ->
       receive
         {mi, Mi} ->
           util:logging(Logfile, atom_to_list(GGT) ++ " hat aktuellen Mi: " ++ integer_to_list(Mi) ++ "\n"),
-          prompt_ggts(Tail, State)
+          prompt_ggts(Tail, Config)
       end
   end.
 
 %beenden
-beenden([], _) -> ok;
-beenden([ GGT | Tail ], State) ->
-  {logfile, Logfile} = keyfind(logfile, State),  util:logging(Logfile, "beenden\n"),
-  {nameservice, NameService} = keyfind(nameservice, State),
+beenden([], Config) ->
+  {logfile, Logfile} = keyfind(logfile, Config),
+  util:logging(Logfile, "Allen ggT-Prozessen ein 'kill' gesendet.");
+beenden([ GGT | Tail ], Config) ->
+  {logfile, Logfile} = keyfind(logfile, Config),
+  util:logging(Logfile, util:to_String(GGT) ++ "beendet sich\n"),
+  {nameservice, NameService} = keyfind(nameservice, Config),
   NameService ! {self(),{lookup, GGT}},
   receive
-    not_found -> util:logging(Logfile, "GGT ist nicht auf derm Namensservice vorhanden\n");
-    {pin, GGTNameNode} -> GGTNameNode ! kill, beenden(Tail, State)
+    not_found ->
+      util:logging(Logfile, "GGT ist nicht auf derm Namensservice vorhanden\n");
+    {pin, GGTNameNode} ->
+      GGTNameNode ! kill,
+      beenden(Tail, Config)
   end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -276,4 +282,158 @@ keystore(Key,[Head|Rest],Front,Tupel) ->
   {K,_} = Head,
   if K == Key -> append(append(Front,Tupel),Rest);
     true -> keystore(Key,Rest,append(Front,Head),Tupel)
+  end.
+
+append([], []) ->
+  [];
+append([],[H|T]) ->
+  [H|T];
+append([],Elem) ->
+  [Elem];
+append([H|T], []) ->
+  [H|T];
+append(Elem, []) ->
+  [Elem];
+append([H1|T1],[H2|T2]) ->
+  append([H1|T1] ++ [H2], T2);
+append([H|T],Elem) ->
+  [H|T] ++ [Elem];
+append(L,[H|T]) ->
+  append([L] ++ [H], T);
+append(E1,E2) ->
+  [E1] ++ [E2].
+
+listLength([]) ->
+  0;
+listLength(L) ->
+  listLength(L,0).
+
+listLength([],A) ->
+  A;
+listLength([_|T],A) ->
+  listLength(T,A+1).
+
+last([]) ->
+  [];
+last([H]) ->
+  H;
+last([_|T]) ->
+  last(T).
+
+nth(1,[H]) ->
+  H;
+nth(1,[H|_]) ->
+  H;
+nth(N,[_|T]) ->
+  nth(N-1, T).
+
+nthtail(0, L) ->
+  L;
+nthtail(1,[_]) ->
+  [];
+nthtail(1,[_|T]) ->
+  T;
+nthtail(N,[_|T]) ->
+  nthtail(N-1, T).
+
+nudge([],_) ->
+  ok;
+nudge([H],Config) ->
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  %Iteriert durch die ggt-Liste und erfragt bei jedem ggt seinen aktuelle Lebenszustand (per “pingGGT”) und loggt diesen.
+  NameService ! {self(),{lookup, H}},
+  receive
+    not_found ->
+      util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+  %Sendet diesen ggt-Prozessen eine Zahl
+    {pin, {_,GGTNode}} ->
+      Pong = net_adm:ping(GGTNode),
+      util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(H) ++ " ist " ++ atom_to_list(Pong) ++ "\n")
+  end;
+nudge([H|T],Config) ->
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  %Iteriert durch die ggt-Liste und erfragt bei jedem ggt seinen aktuelle Lebenszustand (per “pingGGT”) und loggt diesen.
+  NameService ! {self(),{lookup, H}},
+  receive
+    not_found ->
+      util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+    %Sendet diesen ggt-Prozessen eine Zahl
+    {pin, {_,GGTNode}} ->
+      Pong = net_adm:ping(GGTNode),
+      util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(H) ++ " ist " ++ atom_to_list(Pong) ++ "\n"),
+      nudge(T,Config)
+    end.
+
+
+calc([H],Mis,Config) ->
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  CMi = nth(index_of(H, [H]),Mis),
+  NameService ! {self(),{lookup, H}},
+  receive
+    not_found ->
+      util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+  %Sendet diesen ggt-Prozessen eine Zahl
+    {pin, {Name,Node}} ->
+      {Name,Node} ! {setpm, CMi},
+      util:logging(Logfile, "ggT-Prozess " ++ util:to_String(Name) ++ " (" ++ util:to_String(Node) ++ ") initiales Mi " ++ util:to_String(CMi) ++ " gesendet.\n")
+  end;
+calc([H|T],[HMi|TMi],Config) ->
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+    CMi = nth(index_of(H, [H|T]),[HMi|TMi]),
+    NameService ! {self(),{lookup, H}},
+    receive
+      not_found ->
+        util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+    %Sendet diesen ggt-Prozessen eine Zahl
+      {pin, {Name,Node}} ->
+        {Name,Node} ! {setpm, CMi},
+        util:logging(Logfile, "ggT-Prozess " ++ util:to_String(Name) ++ " (" ++ util:to_String(Node) ++ ") initiales Mi " ++ util:to_String(CMi) ++ " gesendet.\n"),
+        calc(T,TMi,Config)
+    end.
+
+
+twentyPerc([H],Ys,Config) ->
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+  NameService ! {self(),{lookup, H}},
+  Y = nth(index_of(H, [H]),Ys),
+  receive
+    not_found ->
+      util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+  %und startet mit sendy rekursiv die Berechnung.
+    {pin, {Name,Node}} ->
+      {Name,Node} ! {sendy, Y},
+      util:logging(Logfile, "ggT-Prozess " ++ util:to_String(Name) ++ " (" ++ util:to_String(Node) ++ ") startendes y " ++ util:to_String(Y) ++ " gesendet.\n")
+  end;
+twentyPerc([H|T],[HYs|TYs],Config) ->
+  {_, NameService} = keyfind(nameservice, Config),
+  {_, Logfile} = keyfind(logfile, Config),
+    NameService ! {self(),{lookup, H}},
+    Y = nth(index_of(H, [H|T]),[HYs|TYs]),
+    receive
+      not_found ->
+        util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
+    %und startet mit sendy rekursiv die Berechnung.
+      {pin, {Name,Node}} ->
+        {Name,Node} ! {sendy, Y},
+        util:logging(Logfile, "ggT-Prozess " ++ util:to_String(Name) ++ " (" ++ util:to_String(Node) ++ ") startendes y " ++ util:to_String(Y) ++ " gesendet.\n"),
+        twentyPerc(T,TYs,Config)
+    end.
+
+msg(Msg) ->
+  {ok, File} = file:consult("koordinator.cfg"),
+  {ok, NameServiceNode} = vsutil:get_config_value(nameservicenode, File),
+  {ok, Koordinatorname} = vsutil:get_config_value(koordinatorname, File),
+  pong = net_adm:ping(NameServiceNode),
+  NameService = global:whereis_name(nameservice),
+  NameService ! {self(),{lookup, Koordinatorname}},
+  receive
+    not_found ->
+      ok;
+    {pin, {Name, Node}} ->
+      {Name, Node} ! Msg
   end.
