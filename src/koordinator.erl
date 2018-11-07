@@ -350,8 +350,14 @@ nudge([H],Config) ->
       util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
   %Sendet diesen ggt-Prozessen eine Zahl
     {pin, {_,GGTNode}} ->
-      Pong = net_adm:ping(GGTNode),
-      util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(H) ++ " ist " ++ atom_to_list(Pong) ++ "\n")
+      GGTNode ! {self(), pingGGT},
+      receive
+        {pongGGT,GGTName} ->
+          util:logging(Logfile, "Lebenszustand von " ++ util:to_String(GGTName) ++ " ist lebendig.\n")
+      after
+        500 ->
+          util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(H) ++ " ist nicht auffindbar\n")
+      end
   end;
 nudge([H|T],Config) ->
   {_, NameService} = keyfind(nameservice, Config),
@@ -363,8 +369,14 @@ nudge([H|T],Config) ->
       util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
     %Sendet diesen ggt-Prozessen eine Zahl
     {pin, {_,GGTNode}} ->
-      Pong = net_adm:ping(GGTNode),
-      util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(H) ++ " ist " ++ atom_to_list(Pong) ++ "\n"),
+      GGTNode ! {self(), pingGGT},
+      receive
+        {pongGGT,GGTName} ->
+          util:logging(Logfile, "Lebenszustand von " ++ util:to_String(GGTName) ++ " ist lebendig.\n")
+      after
+        500 ->
+          util:logging(Logfile, "Lebenszustand von " ++ atom_to_list(H) ++ " ist nicht auffindbar\n")
+      end,
       nudge(T,Config)
     end.
 
