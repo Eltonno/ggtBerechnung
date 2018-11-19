@@ -154,7 +154,8 @@ bereit(Config) ->
               bereit(Config);
             true ->
               %Falls dies so ist und “korrigiere” 0 ist, schreibt er dies nur als Fehlermeldung in die Log-Datei.
-              util:logging(Logfile, atom_to_list(Clientname) ++ " liefert fehlerhaftes Mi: " ++ integer_to_list(CMi) ++ " um " ++ util:to_String(CZeit) ++ " es ist bereits ein kleineres Mi bekannt: " ++ integer_to_list(MinMi) ++ "\n")
+              util:logging(Logfile, atom_to_list(Clientname) ++ " liefert fehlerhaftes Mi: " ++ integer_to_list(CMi) ++ " um " ++ util:to_String(CZeit) ++ " es ist bereits ein kleineres Mi bekannt: " ++ integer_to_list(MinMi) ++ "\n"),
+              bereit(Config)
           end;
       	true ->
           %Ansonsten wird diese Mi als kleinste empfangene Mi gespeichert.
@@ -338,6 +339,11 @@ nthtail(1,[_|T]) ->
 nthtail(N,[_|T]) ->
   nthtail(N-1, T).
 
+first([H|_])->
+  H;
+first(L) ->
+  L.
+
 nudge([],_) ->
   ok;
 nudge([H],Config) ->
@@ -384,7 +390,7 @@ nudge([H|T],Config) ->
 calc([H],Mis,Config) ->
   {_, NameService} = keyfind(nameservice, Config),
   {_, Logfile} = keyfind(logfile, Config),
-  CMi = nth(index_of(H, [H]),Mis),
+  CMi = first(Mis),
   NameService ! {self(),{lookup, H}},
   receive
     not_found ->
@@ -397,7 +403,7 @@ calc([H],Mis,Config) ->
 calc([H|T],[HMi|TMi],Config) ->
   {_, NameService} = keyfind(nameservice, Config),
   {_, Logfile} = keyfind(logfile, Config),
-    CMi = nth(index_of(H, [H|T]),[HMi|TMi]),
+    CMi = first([HMi|TMi]),
     NameService ! {self(),{lookup, H}},
     receive
       not_found ->
@@ -414,7 +420,7 @@ twentyPerc([H],Ys,Config) ->
   {_, NameService} = keyfind(nameservice, Config),
   {_, Logfile} = keyfind(logfile, Config),
   NameService ! {self(),{lookup, H}},
-  Y = nth(index_of(H, [H]),Ys),
+  Y = first(Ys),
   receive
     not_found ->
       util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");
@@ -427,7 +433,7 @@ twentyPerc([H|T],[HYs|TYs],Config) ->
   {_, NameService} = keyfind(nameservice, Config),
   {_, Logfile} = keyfind(logfile, Config),
     NameService ! {self(),{lookup, H}},
-    Y = nth(index_of(H, [H|T]),[HYs|TYs]),
+    Y = first([HYs|TYs]),
     receive
       not_found ->
         util:logging(Logfile, "GGT ist nicht auf dem Namensservice vorhanden\n");

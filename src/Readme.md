@@ -13,6 +13,8 @@ Starten des Koordinators:
 --------------------------
 2>koordinator:start( ).
 
+Alternativ auch mit Paramter möglich, wenn eine bestimmte .cfg Datei anders als die koordinator.cfg genutzt werden soll.
+
 % liest die koordinator.cfg ein:
 % {arbeitszeit, 3}:					simulierte Arbeitszeit f¸r die ggT-Berechnung
 % {termzeit, 3}:					Wenn termzeit lang keine Berechnung dann wird Terminierungsabstimmung initiiert
@@ -26,9 +28,12 @@ Zum Senden an den Koordinator:
 {<koordinatorname>, ’<koordinatorname>@<node>’ ! <State>
 =>Bsp. {euklid, euklid@lab33.cpt.haw-hamburg.de}
 - State: einen der Nachrichten  {calc, ggt}, step (Beendet Anmeldephase), nudge (eine Art ping), prompt (aktuelle Mi's), reset oder kill
-  prompt: Frage nach Mi;  nudge (schubsen): Lebenszustand
-  vals: Steuerwerte; ggt: Zufallswunschggt
-- und liest koordinator.cfg ein
+  prompt: Frage nach Mi;
+  vals: Steuerwerte; ggt: Wunschggt
+
+Innerhalb der Koordinatornode kann dies mittels
+koordinator:msg{<State>}
+ausgeführt werden.
 
 Starten der ggT-Prozesse:
 --------------------------
